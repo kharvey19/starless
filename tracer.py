@@ -1,11 +1,14 @@
 #!/usr/bin/python
 
-import numpy as np
+# import numpy as np
+import cunumeric as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as ndim
 import scipy.misc as spm
 import random,sys,time,os
 import datetime
+import imageio.v2
+
 
 import multiprocessing as multi
 import ctypes
@@ -313,7 +316,7 @@ def rgbtosrgb(arr):
     arr[mask] **= 1/2.4
     arr[mask] *= 1.055
     arr[mask] -= 0.055
-    arr[-mask] *= 12.92
+    arr[~mask] *= 12.92
 
 
 # convert from srgb to linear rgb
@@ -323,12 +326,12 @@ def srgbtorgb(arr):
     arr[mask] += 0.055
     arr[mask] /= 1.055
     arr[mask] **= 2.4
-    arr[-mask] /= 12.92
+    arr[~mask] /= 12.92
 
 
 logger.debug("Loading textures...")
 if SKY_TEXTURE == 'texture':
-    texarr_sky = spm.imread('textures/bgedit.jpg')
+    texarr_sky = imageio.imread('textures/bgedit.jpg')
     # must convert to float here so we can work in linear colour
     texarr_sky = texarr_sky.astype(float)
     texarr_sky /= 255.0
@@ -345,9 +348,9 @@ if SKY_TEXTURE == 'texture':
 
 texarr_disk = None
 if DISK_TEXTURE == 'texture':
-    texarr_disk = spm.imread('textures/adisk.jpg')
+    texarr_disk = imageio.imread('textures/adisk.jpg')
 if DISK_TEXTURE == 'test':
-    texarr_disk = spm.imread('textures/adisktest.jpg')
+    texarr_disk = imageio.imread('textures/adisktest.jpg')
 if texarr_disk is not None:
     # must convert to float here so we can work in linear colour
     texarr_disk = texarr_disk.astype(float)
@@ -486,7 +489,7 @@ def tonumpyarray(mp_arr):
 #CHUNKSIZE = 9000
 if not DISABLE_SHUFFLING:
     np.random.shuffle(pixelindices)
-chunks = np.array_split(pixelindices,numPixels/CHUNKSIZE + 1)
+chunks = np.array_split(pixelindices, int(numPixels/CHUNKSIZE) + 1)
 
 NCHUNKS = len(chunks)
 
@@ -907,44 +910,44 @@ def raytrace_schedule(i,schedule,total_shared,q): # this is the function running
     showprogress("Done.",i,q)
 
 # Threading
-
-process_list = []
-for i in range(NTHREADS):
-    p = multi.Process(target=raytrace_schedule,args=(i,schedules[i],total_colour_buffer_preproc_shared,output.queue))
-    process_list.append(p)
-
-logger.debug("Starting threads...")
-
-for proc in process_list:
-    proc.start()
-
-try:
-    refreshcounter = 0
-    while True:
-        refreshcounter+=1
-        time.sleep(0.1)
-    
-        output.parsemessages()
-
-        if not DISABLE_DISPLAY and (refreshcounter%40 == 0):
-            output.setmessage("Updating display...",-1)
-            plt.imshow(total_colour_buffer_preproc.reshape((RESOLUTION[1],RESOLUTION[0],3)))
-            plt.draw()
-
-        output.setmessage("Idle.", -1)
-
-        alldone = True
-        for i in range(NTHREADS):
-            if process_list[i].is_alive():
-                alldone = False
-        if alldone:
-            break
-except KeyboardInterrupt:
+if __name__ == '__main__':
+    process_list = []
     for i in range(NTHREADS):
-        killers[i] = True
-    sys.exit()
+        p = multi.Process(target=raytrace_schedule,args=(i,schedules[i],total_colour_buffer_preproc_shared,output.queue))
+        process_list.append(p)
 
-del output
+    logger.debug("Starting threads...")
+
+    for proc in process_list:
+        proc.start()
+
+    try:
+        refreshcounter = 0
+        while True:
+            refreshcounter+=1
+            time.sleep(0.1)
+        
+            output.parsemessages()
+
+            if not DISABLE_DISPLAY and (refreshcounter%40 == 0):
+                output.setmessage("Updating display...",-1)
+                plt.imshow(total_colour_buffer_preproc.reshape((RESOLUTION[1],RESOLUTION[0],3)))
+                plt.draw()
+
+            output.setmessage("Idle.", -1)
+
+            alldone = True
+            for i in range(NTHREADS):
+                if process_list[i].is_alive():
+                    alldone = False
+            if alldone:
+                break
+    except KeyboardInterrupt:
+        for i in range(NTHREADS):
+            killers[i] = True
+        sys.exit()
+
+    del output
 
 
 logger.debug("Done tracing.")
